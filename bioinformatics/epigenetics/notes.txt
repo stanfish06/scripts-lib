@@ -1,0 +1,7 @@
+# gene table
+- go to "ucsc table browser", select hg19
+- select genes and gene predictions
+- select GENCODE V47lift37
+- select knownGene
+- output all fields csv
+- to remove rows, use "grep -v input.bed > output.bed", or exclude it in generate_bed.py

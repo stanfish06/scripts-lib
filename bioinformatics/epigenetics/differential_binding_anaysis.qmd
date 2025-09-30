@@ -1,0 +1,347 @@
+---
+title: "differential binding analysis"
+format: html
+editor: source
+---
+
+```{r}
+library(edgeR)
+library(ChIPseeker)
+library(tidyverse)
+library(GenomicRanges)
+library(stringr)
+library(ggsci)
+library(ggplot2)
+rm(list = ls())
+```
+
+```{r}
+scale_table <- read.csv("./scale_table.csv")
+peak_count <- read.delim(
+  "./SMAD1_counts_narrowPeak.txt",
+  comment.char="#"
+)
+peak_count <- peak_count %>%
+  dplyr::rename(
+    'SMAD1-B100-1'="SMAD1.B100.1.aligned.dedup.120bp.SMAD1.B100.1.bam",
+    'SMAD1-B100-2'="SMAD1.B100.2.aligned.dedup.120bp.SMAD1.B100.2.bam",
+    'SMAD1-L10-1' ="SMAD1.L10.1.aligned.dedup.120bp.SMAD1.L10.1.bam",
+    'SMAD1-L10-2' ="SMAD1.L10.2.aligned.dedup.120bp.SMAD1.L10.2.bam",
+    'SMAD1-L30-1' ="SMAD1.L30.1.aligned.dedup.120bp.SMAD1.L30.1.bam",
+    'SMAD1-L30-2' ="SMAD1.L30.2.aligned.dedup.120bp.SMAD1.L30.2.bam",
+    'SMAD1-L300-1'="SMAD1.L300.1.aligned.dedup.120bp.SMAD1.L300.1.bam",
+    'SMAD1-L300-2'="SMAD1.L300.2.aligned.dedup.120bp.SMAD1.L300.2.bam",
+    'SMAD1-mTe'   ="SMAD1.mTe.aligned.dedup.120bp.SMAD1.mTe.bam",
+  ) %>% 
+  tidyr::pivot_longer(
+    cols     =starts_with("SMAD1"),
+    names_to ="sample",
+    values_to="coverage"
+  )
+peak_count <- merge(peak_count, scale_table) %>% 
+  mutate(
+    Score=coverage * scale_factor  
+  ) %>%
+  mutate(
+    Score=ifelse(
+      sample == 'SMAD1-B100-2', 
+      Score,
+      Score
+    )
+  ) %>% 
+  group_by(sample) %>% 
+  mutate(
+    new_total = sum(Score)
+  )
+target_total <- median(unique(peak_count$new_total))
+peak_count <- peak_count %>% 
+  tidyr::pivot_wider(
+    id_cols    =c(Geneid, Chr, Start, End),
+    names_from =sample,
+    values_from=Score
+  ) %>% 
+  dplyr::rename(PeakID=Geneid) %>% 
+  mutate(
+    PeakID=paste0("CnR_", PeakID)
+  )
+
+smad1_chip <- read.csv(
+  "../bigwigs/GSM1505745_Smad1_110812_h64.bed.peak.txt",
+  col.names=c("Chr", "Start", "End", "PeakID", "Score"),
+  sep      ="\t"
+)
+smad1_chip <- smad1_chip %>% 
+  mutate(
+    Chr   =paste0("chr",Chr),
+    PeakID=paste0("Chip_Peak",PeakID)
+  ) %>% 
+  mutate(
+    Score = Score / sum(Score) * target_total
+  ) %>% 
+  dplyr::rename("SMAD1-Meissner"="Score") %>% 
+  tibble()
+
+df <- bind_rows(peak_count, smad1_chip)
+df <- df %>% filter(
+  !str_detect(Chr,"random|chrM|gl00")
+) %>% mutate(
+  across(everything(), ~replace_na(.x, 0))
+)
+rm(smad1_chip, scale_table, peak_count, target_total)
+```
+
+```{r}
+make_plot <- FALSE
+samples_compare <- c(
+  "SMAD1-B100-2",
+  "SMAD1-L10-1",
+  "SMAD1-L30-1",
+  "SMAD1-L300-2",
+  "SMAD1-mTe",
+  "SMAD1-Meissner"
+)
+peaks <- lapply(
+  samples_compare, 
+  function(x){
+    GRanges(
+      seqnames=df$Chr,
+      ranges  =IRanges(start=df$Start, end=df$End),
+      peak_id =df$PeakID,
+      score   =df[[x]]
+    )
+  }
+)
+names(peaks) <- c(
+  "SMAD1-B100",
+  "SMAD1-L10",
+  "SMAD1-L30",
+  "SMAD1-L300",
+  "SMAD1-mTe",
+  "SMAD1-Meissner"
+)
+if (make_plot) {
+  cpal <- c(
+   "#0072BD",
+   "#D95319",
+   "#EDB120",
+   "#7E2F8E",
+   "#77AC30",
+   "#4DBEEE",
+   "#A2142F",
+  )
+  cpal <- adjustcolor(cpal, alpha.f = 0.5)
+  g <- covplot(
+    peaks[c(
+      "SMAD1-B100",
+      "SMAD1-L10",
+      "SMAD1-L30",
+      "SMAD1-L300",
+      "SMAD1-mTe"
+    )], 
+    weightCol ="score",
+    fill_color=cpal,
+  )
+  g <- g + 
+    labs(
+      title="Cut&Run peaks"
+    ) +
+    lims(
+      y = c(0, 90)
+    ) +
+    theme(
+      text           =element_text(size=20, family="Arial", face="bold"),
+      axis.text      =element_text(size=5, family="Arial"),
+      legend.position=c(0.8, 0.2)
+    )
+  ggsave("cnr_peaks.png", g, height = 10, width = 15, dpi = 600)
+  g <- covplot(
+    peaks["SMAD1-Meissner"], 
+    weightCol="score",
+  )
+  g <- g + 
+    labs(
+      title = "Meissner ChIP peaks"
+    ) +
+    lims(
+      y = c(0, 90)
+    ) +
+    theme(
+      text           =element_text(size=20, family="Arial", face="bold"),
+      axis.text      =element_text(size=5, family="Arial"),
+      legend.position=c(0.8, 0.2)
+    )
+  ggsave("chip_peaks.png", g, height = 10, width = 15, dpi = 600)
+  rm(g, cpal)
+}
+
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
+peakAnno <- annotatePeak(
+  peaks[[1]],
+  tssRegion=c(-5000, 5000),
+  TxDb     =txdb,
+  annoDb   ="org.Hs.eg.db",
+  columns  = c("ENTREZID", "ENSEMBL", "SYMBOL", "GENENAME")
+)
+peak_meta <- tibble(as.data.frame(peakAnno@anno@elementMetadata))
+peak_meta <- peak_meta %>%
+  dplyr::rename(
+    PeakID=peak_id,
+  ) %>%
+  dplyr::select(
+    PeakID,
+    annotation,
+    ENSEMBL,
+    SYMBOL,
+    GENENAME
+  )
+df <- dplyr::left_join(df, peak_meta)
+rm(peak_meta, peaks, peakAnno, txdb, samples_compare, make_plot)
+```
+
+```{r}
+signals <- c(1.0024, 0.8351, 0.6770, 0.2988, 0.0032)
+df_use <- df %>% 
+  dplyr::select(
+    PeakID,
+    Chr,
+    Start,
+    End,
+    "SMAD1-B100-2",
+    "SMAD1-L10-1",
+    "SMAD1-L30-1",
+    "SMAD1-L300-2",
+    "SMAD1-mTe",
+    annotation,
+    ENSEMBL,
+    SYMBOL,
+    GENENAME
+  )
+data_columns <- c("SMAD1-B100-2", "SMAD1-L10-1", "SMAD1-L30-1", "SMAD1-L300-2", "SMAD1-mTe")
+# remove peaks with 0 signals
+mask_keep <- rowSums(df_use[, data_columns]) > 0
+df_use <- df_use[mask_keep,]
+design <- model.matrix(~signals)
+y <- DGEList(data.matrix(df_use[, data_columns]))
+rownames(y) <- df_use$PeakID
+fit <- glmQLFit(y, design)
+test_fit <- glmQLFTest(fit)
+res <- topTags(
+    test_fit,
+    n            =Inf,
+    sort.by      ="none",
+    adjust.method="BH",
+  )$table
+res["PeakID"] <- rownames(res)
+res <- tibble(res)
+# convert to one-sided p val
+res$PValue_one_sided <- ifelse(res$logFC > 0, res$PValue / 2, 1)
+res$FDR_one_sided <- p.adjust(res$PValue_one_sided, method = "BH")
+res <- res %>%
+  dplyr::filter(FDR_one_sided <= 0.6) %>%
+  dplyr::filter(PValue_one_sided <= 0.05)
+df_use <- dplyr::inner_join(df_use, res)
+rm(fit, res, test_fit, y, mask_keep, design)
+```
+
+```{r}
+library(org.Hs.eg.db)
+library(GO.db)
+go_terms <- select(
+  org.Hs.eg.db, 
+  keys=unique(df_use$ENSEMBL), 
+  columns=c("GO", "SYMBOL", "ONTOLOGY"), 
+  keytype = "ENSEMBL"
+) %>% dplyr::rename(GOID=GO)
+go_desc <- AnnotationDbi::select(
+  GO.db,
+  keys = unique(go_terms$GOID), 
+  columns = c("TERM", "ONTOLOGY"), 
+  keytype = "GOID" 
+)
+go_table <- dplyr::inner_join(go_terms, go_desc)
+rm(go_terms, go_desc)
+```
+
+```{r}
+library(ComplexHeatmap)
+library(circlize)
+mat <- data.matrix(df_use[data_columns])
+slopes <- data.frame(slopes=df_use$logFC,signif=df_use$F)
+anno_labels <- df_use$SYMBOL
+white_list <- c(
+  "SOX2",
+  "TFAP2A",
+  "TFAP2C",
+  "ID1",
+  "GATA2",
+  "GATA3"
+)
+anno_labels_mask <- anno_labels %in% unique(go_table$SYMBOL[str_detect(go_table$TERM, "transcription factor|ligand")]) & !is.na(anno_labels)
+anno_labels_mask <- (anno_labels_mask & df_use$F > 9) | anno_labels %in% white_list
+colnames(mat) <- c(
+  "B100",
+  "L10",
+  "L30",
+  "L300",
+  "mTe"
+)
+ha_signal = HeatmapAnnotation(
+  BMP=signals,
+  annotation_name_side="left",
+  col = list(BMP = colorRamp2(
+    c(0, 1), 
+    c("#ffe6f2", "#800080")
+  )),
+  gp = gpar(col = "black")
+)
+ht <- Heatmap(
+  mat,
+  cluster_columns = FALSE,
+  top_annotation = ha_signal,
+  column_names_rot = 0,
+  column_names_centered = TRUE,
+  col = colorRamp2(
+    c(0, 20, 40), 
+    c("#4575b4", "#fefcba", "#d73027")
+  ),
+  name = "binding"
+) +
+  Heatmap(
+    slopes['slopes'],
+    width = unit(10, "mm"),
+    column_names_rot = 0,
+    column_names_centered = TRUE,
+    cluster_columns = FALSE,
+    col = colorRamp2(
+      c(0, 10), 
+      c("#f0f0f0", "#636363")
+    ),
+    name = "slope"
+  ) +
+  Heatmap(
+    slopes['signif'],
+    width = unit(10, "mm"),
+    column_names_rot = 0,
+    column_names_centered = TRUE,
+    cluster_columns = FALSE,
+    col = colorRamp2(
+      c(0, 15), 
+      c("#e5f5e0", "#006d2c")
+    ),
+    name = "F stats"
+  ) +
+  rowAnnotation(
+    link=anno_mark(
+      at        =which(anno_labels_mask), 
+      labels    =anno_labels[anno_labels_mask], 
+      link_width=unit(10, "mm"),
+      extend    =0.03,
+      labels_gp =gpar(fontsize = 10), padding = unit(1, "mm")
+    )
+  )
+# Save as PNG
+png("heatmap.png", width = 6, height = 6, units = "in", res = 300)
+draw(ht)
+dev.off()
+```
