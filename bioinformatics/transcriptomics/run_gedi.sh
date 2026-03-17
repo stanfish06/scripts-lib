@@ -2,13 +2,13 @@
 module load use.own
 module load gedi
 RUN_CIT_PREP=true
-RUN_GENOME_PREP=true
+RUN_GENOME_PREP=false
 RUN_SLAM=false
 
 # Generate CIT file
 if $RUN_CIT_PREP; then
 echo "Step 1/3: Generate CIT file for the bam list"
-bamlist2cit <(cat <<EOF
+cat > crosstalk.bamlist <<EOF
 star_salmon/A_1hr.sorted.bam
 star_salmon/A_8hr.sorted.bam
 star_salmon/A_LDN_1hr_2.sorted.bam
@@ -31,7 +31,7 @@ star_salmon/GDF11_8hr.sorted.bam
 star_salmon/SB_1hr.sorted.bam
 star_salmon/SB_8hr.sorted.bam
 EOF
-)
+bamlist2cit crosstalk.bamlist
 fi
 
 # Prep genome
@@ -45,7 +45,7 @@ cp "${SOURCE}/${GTF}.gz" . && gunzip -f "${GTF}.gz"
 gedi -e IndexGenome \
 -s $FASTA \
 -a $GTF \
--n homo_hg38_gedi \
+-n homo_hg38_gedi
 fi
 
 if $RUN_SLAM; then
