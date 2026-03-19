@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 module load use.own
 module load gedi
-RUN_CIT_PREP=true
+RUN_CIT_PREP=false
 RUN_GENOME_PREP=false
-RUN_SLAM=false
+RUN_SLAM=true
 
 # Generate CIT file
 if $RUN_CIT_PREP; then
@@ -54,13 +54,21 @@ if $RUN_SLAM; then
 # -double will only use doubled sequenced part for estimation
 # double seems to make reads more likely be new
 # make sure having no4sU sample
+# -snpConv 0.01 -snppval 0.1 \
+# snpConv is the prior conversion rate, should be experiment dependent?
+#   - like short-pulse should have less conversion
+# check mismatchpos.pdf, if seeing absurd peaks near ends (e.g. 0, 150, 300 for PE150)
 echo "Step 3/3: Run SLAM"
 gedi -e Slam \
--progress -D -trim5p 15 -nthreads 22 \
--snpConv 0.01 -snppval 0.1 \
+-full \
+-progress -D \
+-trim5p 20 \
+-trim3p 20 \
+-nthreads 22 \
+-snpConv 0.05 \
 -modelall \
 -no4sUpattern unl \
 -genomic homo_hg38_gedi \
 -prefix gedi_out/BMP_ACT_crosstalk \
--reads cit.bamlist.cit
+-reads crosstalk.bamlist.cit
 fi
