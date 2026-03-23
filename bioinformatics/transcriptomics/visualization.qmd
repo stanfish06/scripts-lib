@@ -1,0 +1,846 @@
+---
+title: "visualization"
+format: html
+editor: visual
+---
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(ggsci)
+library(ggstar)
+library(ggpubr)
+library(RColorBrewer)
+library(cowplot)
+library(reshape2)
+```
+
+```{r}
+library(GEOquery)
+```
+
+
+
+```{rheader```{r}
+df <- read.csv('pca_combat.csv')
+meta <- read.delim("a_bulkRNA_Kundaje.txt")
+df <- inner_join(df, meta, by = join_by(Var4 == Sample.Name))
+p <- df %>% 
+  filter(str_detect(Var3, 'APS|MPS|H7hESC|H7Trzl|DLL1pPXM|LtM')) %>% 
+  ggplot(aes(x = pc1, y = pc2)) + 
+  geom_star(aes(starshape = Var3, fill = Var4, color = factor(Comment.batch.)), size = 3, starstroke = 0.7) +
+  theme_pubr() +
+  labs(
+    x = 'PC1',
+    y = 'PC2',
+    starshape = 'cell type',
+    fill = 'sample',
+    color = 'batch'
+  ) +
+  guides(fill = guide_legend(ncol=3), starshape = guide_legend(ncol=3), color = guide_legend(ncol=3)) + 
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "right",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    # legend.position.inside = c(0.35, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(2, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    panel.border = element_blank(),
+  ) +
+  scale_color_lancet()
+save_plot('pca_after_correction.png', p, base_width = 8, base_height = 5, dpi = 300)
+```
+
+```{r}
+df <- read.csv('pca.csv')
+meta <- read.delim("a_bulkRNA_Kundaje.txt")
+df <- inner_join(df, meta, by = join_by(Var4 == Sample.Name))
+p <- df %>% 
+  filter(str_detect(Var3, 'APS|MPS|H7hESC|H7Trzl|DLL1pPXM|LtM')) %>% 
+  ggplot(aes(x = pc1, y = pc2)) + 
+  geom_star(aes(starshape = Var3, fill = Var4, color = factor(Comment.batch.)), size = 3, starstroke = 0.7) +
+  theme_pubr() +
+  labs(
+    x = 'PC1',
+    y = 'PC2',
+    starshape = 'cell type',
+    fill = 'sample',
+    color = 'batch'
+  ) +
+  guides(fill = guide_legend(ncol=3), starshape = guide_legend(ncol=3), color = guide_legend(ncol=3)) + 
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "right",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    # legend.position.inside = c(0.35, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(2, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    panel.border = element_blank(),
+  ) +
+  scale_color_lancet()
+save_plot('pca_before_correction.png', p, base_width = 8, base_height = 5, dpi = 300)
+```
+
+```{r}
+loh_RNA <- read.delim("./GSM2257301_All_samples_bulk_tpm.txt/GSM2257301_All_samples_bulk_tpm.txt")
+# loh_RNA %>% write_csv('loh_RNA.csv')
+loh_RNA <- loh_RNA %>%
+  filter(
+    str_detect(geneSymbol, 'EOMES|FOXF1|NKX2-5|ISL1|TBX6|HAND1|FOXC2|TBX1|TBX5|MSGN1|APLNR')
+  ) %>% 
+  dplyr::select(
+    matches('^APS|^MPS|hESC|pPXM|LtM|geneSym|Trzl|GARPpCrdcM|D3EarlySmt')
+  ) %>% 
+  melt(id.vars = 'geneSymbol') %>% 
+  rename(gene = geneSymbol, sample = variable, tpm = value) %>% 
+  mutate(log21p_tpm = log2(tpm + 1)) %>% 
+  {left_join(., meta, by = join_by(sample == Sample.Name))} %>% 
+  select(gene, sample, tpm, log21p_tpm, Comment.batch.) %>% 
+  rename(batch = Comment.batch.) %>% 
+  mutate(batch = factor(batch, levels = c(1, 2, 3), labels = c('batch 1', 'batch 2', 'batch 3'))) %>% 
+  mutate(sample = gsub('DLLp', 'DLL1p', sample)) %>% 
+  mutate(sample = gsub('APS\\_\\d', 'APS', sample)) %>% 
+  mutate(sample = gsub('DLL1pPXM\\_\\d', 'DLL1PXM', sample)) %>% 
+  mutate(sample = gsub('H7hESC\\_\\d', 'H7hESC', sample)) %>% 
+  mutate(sample = gsub('MPS\\_\\d', 'MPS', sample)) %>%
+  mutate(sample = gsub('D2LtM\\_\\d', 'D2LtM', sample)) %>% 
+  mutate(sample = gsub('H7hESC|H7Trzl', 'hESC', sample)) %>%
+  mutate(sample = gsub('D3GARPpCrdcM\\_\\d', 'D3GARPpCrdcM', sample)) %>%
+  mutate(sample = gsub('D3EarlySmt\\_\\d', 'D3EarlySmt', sample)) %>%
+  mutate(batch = factor(ifelse(sample == 'D3GARPpCrdcM', 3, batch), levels = c(1, 2, 3), labels = c('batch 1', 'batch 2', 'batch 3'))) %>% 
+  group_by(gene, sample, batch) %>% 
+  mutate(mean_tpm = mean(tpm), mean_log21p_tpm = mean(log21p_tpm)) #%>% mutate(mean_tpm = ifelse(sample == 'APS', NA, mean_tpm), mean_log21p_tpm = ifelse(sample == 'APS', NA, mean_log21p_tpm))
+```
+
+```{r}
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(ggstar)
+library(ggpubr)
+library(patchwork)
+library(grid)
+
+loh_RNA_lpm <- loh_RNA %>%
+  filter(str_detect(sample, "hESC|MPS|D2Lt|CrdcM")) %>%
+  mutate(sample = ordered(sample, levels = c("hESC", "MPS", "D2LtM", "D3GARPpCrdcM")))
+
+# slots for custom x tick labels
+xlab_p1 <- c(
+  "hESC" = "hESC (D0)",
+  "MPS" = "MPS (D1)",
+  "D2LtM" = "Lateral meso (D2)",
+  "D3GARPpCrdcM" = "Cardiac meso (D3)"
+)
+
+xlab_p2 <- c(
+  "hESC" = "hESC (D0)",
+  "APS" = "APS (D1)",
+  "DLL1PXM" = "Paraxial meso (D2)",
+  "D3EarlySmt" = "Early somites (D3)"
+)
+
+base_theme <- theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = "arial", face = "bold"),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = "arial", face = "bold"),
+    legend.title = element_text(size = 12, family = "arial", face = "bold"),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(linewidth = 0.75),
+    axis.line = element_line(linewidth = 0.75, lineend = "round"),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", linewidth = 0.75),
+    legend.key.spacing.y = unit(1, "mm"),
+    legend.key.width = unit(2, "mm"),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust = 0.91),
+    panel.border = element_blank()
+  )
+
+p1 <- loh_RNA %>%
+  filter(str_detect(sample, "hESC|MPS|D2Lt|CrdcM")) %>%
+  mutate(sample = ordered(sample, levels = c("hESC", "MPS", "D2LtM", "D3GARPpCrdcM"))) %>%
+  filter(gene == "APLNR", batch == "batch 3") %>%
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(
+    starshape = 15, fill = "#00bbd7", color = "#077fb0",
+    size = 3, starstroke = 1, alpha = 0.75
+  ) +
+  geom_line(
+    aes(group = interaction(batch, gene), y = mean_log21p_tpm),
+    color = "#00468BFF", alpha = 0.75, linewidth = 1,
+    data = filter(loh_RNA_lpm, gene == "APLNR", batch == "batch 3")
+  ) +
+  scale_x_discrete(labels = xlab_p1) +
+  coord_cartesian(ylim = c(0, 10)) +
+  labs(
+    y = expression(bold(log["2"] * ("TPM + 1"))),
+    x = NULL,
+    title = "APLNR"
+  ) +
+  base_theme
+
+p2 <- loh_RNA %>%
+  filter(str_detect(sample, "hESC|APS|DLL1PXM|D3Early")) %>%
+  mutate(sample = ordered(sample, levels = c("hESC", "APS", "DLL1PXM", "D3EarlySmt"))) %>%
+  filter(gene == "APLNR", str_detect(batch, "batch 2|batch 1")) %>%
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(
+    starshape = 15, fill = "#00bbd7", color = "#077fb0",
+    size = 3, starstroke = 1, alpha = 0.75
+  ) +
+  geom_line(
+    aes(group = gene, y = mean_log21p_tpm),
+    color = "#00468BFF", alpha = 0.75, linewidth = 1
+  ) +
+  scale_x_discrete(labels = xlab_p2) +
+  coord_cartesian(ylim = c(0, 10)) +
+  labs(
+    y = expression(bold(log["2"] * ("TPM + 1"))),
+    x = NULL,
+    title = "APLNR"
+  ) +
+  base_theme
+
+p <- p1 + p2 + plot_layout(ncol = 2)
+save_plot('APLNR_loh.png', p, base_width = 10, base_height = 5, dpi = 300)
+```
+
+```{r}
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'EOMES', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), color = gene, y = mean_tpm), linetype = 'dashed') +
+  labs(
+    title = 'EOMES'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_EOMES.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'FOXF1', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), color = gene, y = mean_tpm), linetype = 'dashed') +
+  labs(
+    title = 'FOXF1'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_FOXF1.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'ISL1', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), color = gene, y = mean_tpm), linetype = 'dashed') +
+  labs(
+    title = 'IS1'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_ISL1.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'NKX2-5', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), color = gene, y = mean_tpm), linetype = 'dashed') +
+  labs(
+    title = 'NKX2-5'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_NKX2-5.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'TBX1', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), color = gene, y = mean_tpm), linetype = 'dashed') +
+  labs(
+    title = 'TBX1'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_TBX1.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'TBX5', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), color = gene, y = mean_tpm), linetype = 'dashed') +
+  labs(
+    title = 'TBX5'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_TBX5.png', p, base_width = 5, base_height = 5, dpi = 300)
+```
+
+
+```{r}
+loh_RNA_lpm <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM'))) 
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'EOMES', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1, data = filter(loh_RNA_lpm, gene == 'EOMES', batch == 'batch 3')) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'EOMES'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_EOMES_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'FOXF1', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1, data = filter(loh_RNA_lpm, gene == 'FOXF1', batch == 'batch 3')) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'FOXF1'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_FOXF1_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'ISL1', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1, data = filter(loh_RNA_lpm, gene == 'ISL1', batch == 'batch 3')) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'ISL1'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_ISL1_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'NKX2-5', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1, data = filter(loh_RNA_lpm, gene == 'NKX2-5', batch == 'batch 3')) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'NKX2-5'
+  ) +
+  theme_pubr() +
+  scale_y_continuous(breaks = c(0, 1, 2)) +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_NKX2-5_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'TBX1', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1, data = filter(loh_RNA_lpm, gene == 'TBX1', batch == 'batch 3')) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'TBX1'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_TBX1_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'TBX5', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1, data = filter(loh_RNA_lpm, gene == 'TBX5', batch == 'batch 3')) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'TBX5'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_TBX5_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'TBX6', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1, data = filter(loh_RNA_lpm, gene == 'TBX6', batch == 'batch 3')) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'TBX6'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_TBX6_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|MPS|D2Lt|APS|CrdcM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'MPS', 'D2LtM', 'D3GARPpCrdcM', 'APS'))) %>% 
+  filter(gene == 'MSGN1', batch == 'batch 3') %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = interaction(batch, gene), y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1, data = filter(loh_RNA_lpm, gene == 'MSGN1', batch == 'batch 3')) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'MSGN1'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_MPS_LtM_MSGN1_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+```
+
+
+```{r}
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|APS|DLL1PXM|D3Early')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'APS', 'DLL1PXM', 'D3EarlySmt'))) %>% 
+  filter(gene == 'TBX6', str_detect(batch, 'batch 2|batch 1')) %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = gene, y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'TBX6'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_APS_PXM_SMT_TBX6_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|APS|DLL1PXM|D3Early')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'APS', 'DLL1PXM', 'D3EarlySmt'))) %>% 
+  filter(gene == 'HAND1', str_detect(batch, 'batch 2|batch 1')) %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = gene, y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'HAND1'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_APS_PXM_SMT_HAND1_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|APS|DLL1PXM|D3Early')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'APS', 'DLL1PXM', 'D3EarlySmt'))) %>% 
+  filter(gene == 'FOXC2', str_detect(batch, 'batch 2|batch 1')) %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = gene, y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'FOXC2'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_APS_PXM_SMT_FOXC2_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|APS|DLL1PXM|D3Early')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'APS', 'DLL1PXM', 'D3EarlySmt'))) %>% 
+  filter(gene == 'MSGN1', str_detect(batch, 'batch 2|batch 1')) %>% 
+  ggplot(aes(x = sample, y = log21p_tpm)) +
+  geom_star(starshape = 15, fill = '#00bbd7', color = '#077fb0', size = 3, starstroke = 1, alpha = 0.75) +
+  geom_line(aes(group = gene, y = mean_log21p_tpm), color = '#00468BFF', alpha = 0.75, linewidth = 1) +
+  labs(
+    y=expression(bold(log["2"] * ("TPM + 1"))),
+    title = 'MSGN1'
+  ) +
+  theme_pubr() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "none",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    axis.text.x = element_text(angle = 30, vjust = 0.8, hjust=0.91),
+    panel.border = element_blank(),
+  )
+save_plot('hESC_APS_PXM_SMT_MSGN1_log2_1p.png', p, base_width = 5, base_height = 5, dpi = 300)
+```
+
+
+```{r}
+p <- loh_RNA %>%
+  filter(str_detect(sample, 'hESC|APS|DLL1PXM')) %>% 
+  mutate(sample = ordered(sample, levels = c('hESC', 'APS', 'DLL1PXM'))) %>% 
+  ggplot(aes(x = sample, y = tpm)) +
+  geom_star(
+    aes(starshape = batch, fill = gene), size = 3, starstroke = 0.7, alpha = 0.75
+  ) +
+  geom_line(aes(group = interaction(batch, gene), color = gene), linetype = 'dashed') +
+  theme_pubr() +
+  scale_fill_npg() +
+  scale_color_npg() +
+  theme(
+    text = element_text(size = 20, family = 'arial', face = 'bold'),
+    legend.position = "inside",
+    legend.text = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.title = element_text(size = 12, family = 'arial', face = 'bold'),
+    legend.position.inside = c(0.85, 0.5),
+    aspect.ratio = 1,
+    axis.ticks.length = unit(-1.25, "mm"),
+    axis.ticks = element_line(size = 0.75),
+    axis.line = element_line(size = 0.75, lineend = 'round'),
+    legend.background = element_blank(),
+    legend.box.background = element_rect(colour = "black", size = 0.75),
+    legend.key.spacing.y = unit(1, 'mm'),
+    legend.key.width = unit(2, 'mm'),
+    panel.border = element_blank(),
+  ) +
+  labs(
+    starshape = 'batch',
+    color = 'gene',
+    fill = 'gene'
+  )
+save_plot('hESC_APS_PXM_EOMES_FOXF1.png', p, base_width = 5, base_height = 5, dpi = 300)
+```
+
+```{r}
+celltype <- df$Factor.Value.tissue.
+celltype[nchar(celltype)==0] <- 'ESC'
+modcombat <- model.matrix(~as.factor(celltype))
+combatExpr <- ComBat(
+  dat = logBulkTPM, 
+  batch = df$Comment.batch., 
+  mod = modcombat, 
+  par.prior = FALSE, 
+  prior.plots = FALSE)
+
+combatExpr <- ComBat(
+  dat = bulkTPMData, 
+  batch = df$Comment.batch., 
+  mod = modcombat, 
+  par.prior = FALSE, 
+  prior.plots = FALSE)
+
+combatExpr[combatExpr < 0] <- 0
+```
+
+
+```{r}
+cbind(bulkTPMData[, 1:2], combatExpr) %>% write.csv('combat_expression.csv', row.names = FALSE)
+```
+
